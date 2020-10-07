@@ -11,13 +11,27 @@ from phonopy.phonon.irreps import IrReps
 import os
 
 
-class AtomicContributionsCalculator:
+class AtomicContributionsCalculator(object):
 
-    def __init__(self, PoscarName='POSCAR', ForceConstants=False, ForceFileName='FORCE_SETS', BornFileName='BORN',
-                 supercell=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], nac=False, symprec=1e-5, masses=[],
-                 primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], degeneracy_tolerance=1e-4, factor=VaspToCm, q=[0, 0, 0]):
-        """Class that calculates contributions of each atom to the phonon modes at Gamma
-            Args:
+    def __init__(
+        self,
+        PoscarName='POSCAR',
+        ForceConstants=False,
+        ForceFileName='FORCE_SETS',
+        BornFileName='BORN',
+        supercell=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        nac=False,
+        symprec=1e-5,
+        masses=[],
+        primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        degeneracy_tolerance=1e-4,
+        factor=VaspToCm,
+        q=[0, 0, 0]
+    ):
+        """
+        Class that calculates contributions of each atom to the phonon modes at Gamma
+
+        Args:
             PoscarName (str): name of the POSCAR that was used for the phonon calculation
             BornFileName (str): name of the file with BORN charges (formatted with outcar-born)
             ForceConstants (boolean): If True, ForceConstants are read in. If False, forces are read in.
@@ -364,8 +378,6 @@ class AtomicContributionsCalculator:
                    ncol=len(atomgroups))
 
         plt.savefig(filename, bbox_inches="tight")
-
-        plt.show()
 
     def __get_freqbordersforplot(self, freqstart, freqend, freqlist):
         if freqstart == []:
