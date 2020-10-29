@@ -1,7 +1,6 @@
 # Copyright (C) 2017 Janine George
 
 import numpy as np
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 from phonopy import Phonopy
 from phonopy.interface.vasp import read_vasp
@@ -180,7 +179,7 @@ class AtomicContributionsCalculator(object):
         self._PercentageAtom = {}
         for freq in range(len(self._frequencies)):
             for atom in range(self.__natoms):
-                sum = 0;
+                sum = 0
                 for alpha in range(3):
                     sum = sum + abs(self._Eigenvector(atom, freq, alpha) * self._Eigenvector(atom, freq, alpha))
                 self._PercentageAtom[freq, atom] = sum
@@ -202,9 +201,9 @@ class AtomicContributionsCalculator(object):
         atomssum = {}
         saver = {}
         for freq in range(len(self._frequencies)):
-            atomssum[freq] = 0;
+            atomssum[freq] = 0
             for atom in range(self.__natoms):
-                sum = 0;
+                sum = 0
                 for alpha in range(3):
                     sum = sum + abs(self.__massEig(atom, freq, alpha) * self.__massEig(atom, freq, alpha))
                 atomssum[freq] = atomssum[freq] + sum
@@ -245,7 +244,7 @@ class AtomicContributionsCalculator(object):
         file.close()
 
     def plot(self, atomgroups, colorofgroups, legendforgroups, freqstart=[], freqend=[], freqlist=[], labelsforfreq=[],
-             filename="Plot.eps", transmodes=True, massincluded=True):
+             irreps_ax=True, transmodes=True, massincluded=True):
         """
         Plots contributions of atoms/several atoms to modes with certain frequencies (freqlist starts at 1 here)
 
@@ -262,8 +261,6 @@ class AtomicContributionsCalculator(object):
             massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation instead of the eigenvector
         """
 
-        p = {}
-        summe = {}
         try:
             if labelsforfreq == []:
                 labelsforfreq = self._IRLabels
@@ -297,16 +294,24 @@ class AtomicContributionsCalculator(object):
                 except:
                     newlabelsforfreq.append('')
 
-        self._plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups,
+        return self._plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups,
                    freqstart=freqstart, freqend=freqend, freqlist=newfreqlist, labelsforfreq=newlabelsforfreq,
-                   filename=filename, massincluded=massincluded)
+                   irreps_ax=irreps_ax, massincluded=massincluded)
 
-    def _plot(self, atomgroups, colorofgroups, legendforgroups, freqstart=[], freqend=[], freqlist=[], labelsforfreq=[],
-              filename="Plot.eps", massincluded=True):
+    def _plot(self,
+              atomgroups,
+              colorofgroups,
+              legendforgroups,
+              freqstart=[],
+              freqend=[],
+              freqlist=[],
+              labelsforfreq=[],
+              irreps_ax = True,
+              massincluded=True):
         """
         Plots contributions of atoms/several atoms to modes with certain frequencies (freqlist starts at 0 here)
 
-        args:
+        Args:
             atomgroups (list of list of ints): list that groups atoms, atom numbers start at 1
             colorofgroups (list of str): list that matches a color to each group of atoms
             legendforgroups (list of str): list that gives a legend for each group of atoms
@@ -318,8 +323,8 @@ class AtomicContributionsCalculator(object):
             massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation instead of the eigenvector
         """
         # setting of some parameters in matplotlib: http://matplotlib.org/users/customizing.html
-        mpl.rcParams["savefig.directory"] = os.chdir(os.getcwd())
-        mpl.rcParams["savefig.format"] = 'eps'
+        #mpl.rcParams["savefig.directory"] = os.chdir(os.getcwd())
+        #mpl.rcParams["savefig.format"] = 'eps'
 
         fig, ax1 = plt.subplots()
         p = {}
@@ -327,43 +332,45 @@ class AtomicContributionsCalculator(object):
 
         for group in range(len(atomgroups)):
             color1 = colorofgroups[group]
-            Entry = {}
+            entry = {}
             for freq in range(len(freqlist)):
-                Entry[freq] = 0
+                entry[freq] = 0
             for number in atomgroups[group]:
                 # set the first atom to 0
                 atom = int(number) - 1
                 for freq in range(len(freqlist)):
                     if massincluded:
-                        Entry[freq] = Entry[freq] + self.__get_Contributions(freqlist[freq], atom)
+                        entry[freq] = entry[freq] + self.__get_Contributions(freqlist[freq], atom)
                     else:
-                        Entry[freq] = Entry[freq] + self.__get_Contributions_withoutmassweight(freqlist[freq], atom)
+                        entry[freq] = entry[freq] + self.__get_Contributions_withoutmassweight(freqlist[freq], atom)
                     if group == 0:
                         summe[freq] = 0
 
             # plot bar chart
-            p[group] = ax1.barh(np.arange(len(freqlist)), list(Entry.values()), left=list(summe.values()), color=color1,
-                                edgecolor="black", height=1, label=legendforgroups[group])
+            p[group] = ax1.barh(np.arange(len(freqlist)),
+                                list(entry.values()),
+                                left=list(summe.values()),
+                                color=color1,
+                                edgecolor="black",
+                                height=1,
+                                label=legendforgroups[group])
             # needed for "left" in the bar chart plot
             for freq in range(len(freqlist)):
                 if group == 0:
-                    summe[freq] = Entry[freq]
+                    summe[freq] = entry[freq]
                 else:
-                    summe[freq] = summe[freq] + Entry[freq]
+                    summe[freq] = summe[freq] + entry[freq]
         labeling = {}
         for freq in range(len(freqlist)):
             labeling[freq] = round(self._frequencies[freqlist[freq]], 1)
         # details for the plot
         plt.rc("font", size=8)
         ax1.set_yticklabels(list(labeling.values()))
+        print(list(labeling.values()))
         ax1.set_yticks(np.arange(0.0, len(self._frequencies) + 0.0))
-        ax2 = ax1.twinx()
-        ax2.set_yticklabels(labelsforfreq)
-        ax2.set_yticks(np.arange(0.0, len(self._frequencies) + 0.0))
         # start and end of the yrange
         start, end = self.__get_freqbordersforplot(freqstart, freqend, freqlist)
         ax1.set_ylim(start - 0.5, end - 0.5)
-        ax2.set_ylim(start - 0.5, end - 0.5)
         ax1.set_xlim(0.0, 1.0)
         ax1.set_xlabel('Contribution of Atoms to Modes')
         if self.__factor == VaspToCm:
@@ -376,8 +383,16 @@ class AtomicContributionsCalculator(object):
             ax1.set_ylabel('Frequency')
         ax1.legend(bbox_to_anchor=(0, 1.02, 1, 0.2), loc="lower left", mode="expand", borderaxespad=0,
                    ncol=len(atomgroups))
+        if irreps_ax:
+            ax2 = ax1.twinx()
+            ax2.set_yticklabels(labelsforfreq)
+            ax2.set_yticks(np.arange(0.0, len(self._frequencies) + 0.0))
+            ax2.set_ylim(start - 0.5, end - 0.5)
 
-        plt.savefig(filename, bbox_inches="tight")
+        # plt.savefig(filename, bbox_inches="tight")
+        plt.tight_layout()
+
+        return plt
 
     def __get_freqbordersforplot(self, freqstart, freqend, freqlist):
         if freqstart == []:
@@ -401,10 +416,11 @@ class AtomicContributionsCalculator(object):
 
         return start, end
 
-    def plot_irred(self, atomgroups, colorofgroups, legendforgroups, transmodes=False, irreps=[], filename="Plot.eps",
+    def plot_irred(self, atomgroups, colorofgroups, legendforgroups, transmodes=False, irreps=[], irreps_ax=True,
                    freqstart=[], freqend=[], massincluded=True):
         """
-        Plots contributions of atoms/several atoms to modes with certain irreducible representations (selected by Mulliken symbol)
+        Plots contributions of atoms/several atoms to modes with certain irreducible representations (selected by
+        Mulliken symbol)
         args:
             atomgroups (list of list of ints): list that groups atoms, atom numbers start at 1
             colorofgroups (list of str): list that matches a color to each group of atoms
@@ -427,6 +443,10 @@ class AtomicContributionsCalculator(object):
                     freqlist.append(self.__freqlist[band])
                     labelsforfreq.append(self._IRLabels[band])
 
-        self._plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups,
-                   filename=filename, freqlist=freqlist, labelsforfreq=labelsforfreq, freqstart=freqstart,
-                   freqend=freqend, massincluded=massincluded)
+        if freqlist:
+            return self._plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups,
+                   freqlist=freqlist, labelsforfreq=labelsforfreq, freqstart=freqstart,
+                   freqend=freqend, irreps_ax=irreps_ax, massincluded=massincluded)
+        else:
+            print("Empty irreducible representations plot.")
+            return None
