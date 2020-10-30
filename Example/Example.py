@@ -4,9 +4,9 @@ from AtomicContributions.ContributionsOfAtomsToModes import AtomicContributionsC
 
 
 # Initialize AtomicContributionToModes
-test = AtomicContributionsCalculator(PoscarName='POSCAR', ForceConstants=False, ForceFileName='FORCE_SETS',
-                                     supercell=[[3, 0, 0], [0, 3, 0], [0, 0, 4]],
-                                     primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], )
+test = AtomicContributionsCalculator(poscar_name='POSCAR', forceconstants=False, force_filename='FORCE_SETS',
+                                     supercell_matrix=[[3, 0, 0], [0, 3, 0], [0, 0, 4]],
+                                     primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
 # write a file with atomic contributions to each mode
 test.write_file()
@@ -17,10 +17,11 @@ colorofgroups = ['black', 'red', 'green', 'grey']  # this list gives the colors 
 legendforgroups = ['C', 'O', 'N', 'H']  # this list gives the legend for the grouped atoms
 
 # Plot with all modes
-test.plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups, filename='allmodes.eps',
-          transmodes=False)
+plt = test.plot(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups, transmodes=False)
+plt.savefig('allmodes.eps', bbox_inches="tight")
 
 # Plot with modes that have the irreducible representation B2 and E (leaves out translational modes by default)
 # Have a look at https://github.com/atztogo/phonopy/blob/master/phonopy/phonon/irreps.py for the strings you need to represent the irreducible representations
-test.plot_irred(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups, irreps=['B2', 'E'],
-                filename='IRactivemodes.eps')
+plt = test.plot_irred(atomgroups=atomgroups, colorofgroups=colorofgroups, legendforgroups=legendforgroups,
+                      irreps=['B2', 'E'])
+plt.savefig('IRactivemodes.eps', bbox_inches="tight")

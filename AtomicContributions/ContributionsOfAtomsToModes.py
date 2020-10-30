@@ -72,21 +72,24 @@ class AtomicContributionsCalculator(object):
             self._phonon.set_nac_params(born_file)
 
         # frequencies and eigenvectors at Gamma
-        self.q = list(q) or [0, 0, 0]
+        if q:
+            self.q = list(q)
+        else:
+            self.q = [0, 0, 0]
         self._frequencies, self._eigvecs = self._phonon.get_frequencies_with_eigenvectors(self.q)
 
         self.__NumberOfBands = len(self._frequencies)
 
         # Get Contributions
-        self._set_contributions()
-        self.__set_contributions_withoutmassweight()
+        self._set_contributions_eigenvector()
+        self._set_contributions_eigendisplacements()
 
         # irrepsobject
         try:
             self.__set_irlabels(phonon=self._phonon,
                                 degeneracy_tolerance=degeneracy_tolerance,
                                 factor=factor,
-                                q=q,
+                                q=self.q,
                                 symprec=symprec)
         except:
             print(
@@ -168,10 +171,11 @@ class AtomicContributionsCalculator(object):
 
         return self._PercentageAtom
 
-    def _set_contributions(self, squared=True):
+    def _set_contributions_eigenvector(self, squared=True):
         """
         Calculate contribution of each atom to modes
         """
+        # TODO: Change this from dict to list/array
         self._PercentageAtom = {}
         modesum = []
         for band in range(len(self._frequencies)):
@@ -192,7 +196,7 @@ class AtomicContributionsCalculator(object):
                 for atom in range(self.__natoms):
                     self._PercentageAtom[band, atom] = saver[band, atom] / modesum[band]
 
-    def _get_contributions(self, band, atom):
+    def _get_contributions_eigenvector(self, band, atom):
         """
         Gives contribution of specific atom to modes with certain frequency
         args:
@@ -201,11 +205,12 @@ class AtomicContributionsCalculator(object):
         """
         return self._PercentageAtom[band, atom]
 
-    def __set_contributions_withoutmassweight(self):
+    def _set_contributions_eigendisplacements(self):
         """
         Calculate contribution of each atom to modes
         Here, eigenvectors divided by sqrt(mass of the atom) are used for the calculation
         """
+        # TODO: Change this from dict to list/array
         self.__PercentageAtom_massweight = {}
         atomssum = {}
         saver = {}
@@ -246,7 +251,7 @@ class AtomicContributionsCalculator(object):
         for mode in range(len(self._frequencies)):
             file.write('%s ' % (self._frequencies[mode]))
             for atom in range(self.__natoms):
-                file.write('%s ' % (self._get_contributions(mode, atom)))
+                file.write('%s ' % (self._get_contributions_eigenvector(mode, atom)))
             file.write('\n ')
 
         file.close()
@@ -358,7 +363,7 @@ class AtomicContributionsCalculator(object):
                 atom = int(number) - 1
                 for freq in range(len(freqlist)):
                     if massincluded:
-                        entry[freq] = entry[freq] + self._get_contributions(freqlist[freq], atom)
+                        entry[freq] = entry[freq] + self._get_contributions_eigenvector(freqlist[freq], atom)
                     else:
                         entry[freq] = entry[freq] + self.__get_contributions_withoutmassweight(freqlist[freq], atom)
                     if group == 0:
@@ -384,7 +389,6 @@ class AtomicContributionsCalculator(object):
         # details for the plot
         plt.rc("font", size=8)
         ax1.set_yticklabels(list(labeling.values()))
-        print(list(labeling.values()))
         ax1.set_yticks(np.arange(0.0, len(self._frequencies) + 0.0))
         # start and end of the yrange
         start, end = self.__get_freqbordersforplot(freqstart, freqend, freqlist)
