@@ -7,36 +7,36 @@ from phonopy.interface.vasp import read_vasp
 from phonopy.file_IO import parse_FORCE_SETS, parse_BORN, parse_FORCE_CONSTANTS
 from phonopy.units import VaspToCm, VaspToTHz, VaspToEv
 from phonopy.phonon.irreps import IrReps
-import os
 
 
 class AtomicContributionsCalculator(object):
 
     def __init__(
         self,
-        PoscarName='POSCAR',
-        ForceConstants=False,
-        ForceFileName='FORCE_SETS',
-        BornFileName='BORN',
-        supercell=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        poscar_name: str= 'POSCAR',
+        forceconstants: bool=False,
+        force_filename: str='FORCE_SETS',
+        born_filename: str='BORN',
+        supercell_matrix=None,
         nac=False,
         symprec=1e-5,
-        masses=[],
-        primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        masses: list=None,
+        primitive=None,
         degeneracy_tolerance=1e-4,
         factor=VaspToCm,
-        q=[0, 0, 0]
+        q=None
     ):
         """
         Class that calculates contributions of each atom to the phonon modes at Gamma
 
         Args:
-            PoscarName (str): name of the POSCAR that was used for the phonon calculation
-            BornFileName (str): name of the file with BORN charges (formatted with outcar-born)
-            ForceConstants (boolean): If True, ForceConstants are read in. If False, forces are read in.
-            ForceFileName (str): name of the file including force constants or forces
-            supercell (list of lists): reads in supercell
-            nac (boolean): If true, NAC is applied. (please be careful if you give a primitive cell. NAC should then be calculated for primitive cell)
+            poscar_name (str): name of the POSCAR that was used for the phonon calculation
+            born_filename (str): name of the file with BORN charges (formatted with outcar-born)
+            forceconstants (boolean): If True, ForceConstants are read in. If False, forces are read in.
+            force_filename (str): name of the file including force constants or forces
+            supercell_matrix (list of lists): reads in supercell
+            nac (boolean): If true, NAC is applied. (please be careful if you give a primitive cell. NAC should then be
+            calculated for primitive cell)
             symprec (float): contains symprec tag as used in Phonopy
             masses (list): Masses in this list are used instead of the ones prepared in Phonopy. Useful for isotopes.
             primitive (list of lists): contains rotational matrix to arrive at primitive cell
@@ -45,46 +45,48 @@ class AtomicContributionsCalculator(object):
 
         """
 
-        self.__unitcell = read_vasp(PoscarName)
-        self.__supercell = supercell
-        self.__phonon = Phonopy(self.__unitcell, supercell_matrix=self.__supercell, primitive_matrix=primitive,
-                                factor=factor, symprec=symprec)
-        self.__natoms = self.__phonon.get_primitive().get_number_of_atoms()
-        self.__symbols = self.__phonon.get_primitive().get_chemical_symbols()
+        self._unitcell = read_vasp(poscar_name)
+        self._supercell_matrix = supercell_matrix or [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        primitive = primitive or [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        self._phonon = Phonopy(self._unitcell, supercell_matrix=self._supercell_matrix, primitive_matrix=primitive,
+                               factor=factor, symprec=symprec)
+        self.__natoms = self._phonon.get_primitive().get_number_of_atoms()
+        self.__symbols = self._phonon.get_primitive().get_chemical_symbols()
         self.__factor = factor
         # If different masses are supplied
         if masses:
-            self.__phonon.set_masses(masses)
-        self.__masses = self.__phonon.get_primitive().get_masses()
+            self._phonon.set_masses(masses)
+        self._masses = self._phonon.get_primitive().get_masses()
 
         # Forces or Force Constants
-        if not ForceConstants:
-            self.__set_ForcesSets(filename=ForceFileName, phonon=self.__phonon)
+        if not forceconstants:
+            self.__set_forcesets(filename=force_filename, phonon=self._phonon)
 
-        if ForceConstants:
-            self.__set_ForceConstants(filename=ForceFileName, phonon=self.__phonon)
+        if forceconstants:
+            self.__set_force_constants(filename=force_filename, phonon=self._phonon)
 
         # Apply NAC Correction
         if nac:
-            BORN_file = parse_BORN(self.__phonon.get_primitive(), filename=BornFileName)
-            self.__BORN_CHARGES = BORN_file['born']
-            self.__phonon.set_nac_params(BORN_file)
+            born_file = parse_BORN(self._phonon.get_primitive(), filename=born_filename)
+            self.__BORN_CHARGES = born_file['born']
+            self._phonon.set_nac_params(born_file)
 
         # frequencies and eigenvectors at Gamma
-        self._frequencies, self._eigvecs = self.__phonon.get_frequencies_with_eigenvectors(q)
+        self.q = list(q) or [0, 0, 0]
+        self._frequencies, self._eigvecs = self._phonon.get_frequencies_with_eigenvectors(self.q)
 
         self.__NumberOfBands = len(self._frequencies)
 
-        # Nicer format of the eigenvector file
-        self.__FormatEigenvectors()
-
         # Get Contributions
-        self.__set_Contributions()
-        self.__set_Contributions_withoutmassweight()
+        self._set_contributions()
+        self.__set_contributions_withoutmassweight()
 
         # irrepsobject
         try:
-            self.__set_IRLabels(phonon=self.__phonon, degeneracy_tolerance=degeneracy_tolerance, factor=factor, q=q,
+            self.__set_irlabels(phonon=self._phonon,
+                                degeneracy_tolerance=degeneracy_tolerance,
+                                factor=factor,
+                                q=q,
                                 symprec=symprec)
         except:
             print(
@@ -97,9 +99,9 @@ class AtomicContributionsCalculator(object):
         """
         shows primitive cell used for the plots and evaluations on screen
         """
-        print(self.__phonon.get_primitive())
+        print(self._phonon.get_primitive())
 
-    def __set_ForcesSets(self, filename, phonon):
+    def __set_forcesets(self, filename, phonon):
         """
         sets forces
 
@@ -109,20 +111,24 @@ class AtomicContributionsCalculator(object):
         phonon.set_displacement_dataset(force_sets)
         phonon.produce_force_constants()
 
-    def __set_ForceConstants(self, filename, phonon):
+    def __set_force_constants(self, filename, phonon):
         """
         sets force constants
         """
         force_constants = parse_FORCE_CONSTANTS(filename=filename)
         phonon.set_force_constants(force_constants)
 
-    def __set_IRLabels(self, phonon, degeneracy_tolerance, factor, q, symprec):
+    def __set_irlabels(self, phonon, degeneracy_tolerance, factor, q, symprec):
         """
         sets list of irreducible labels and list of frequencies without degeneracy
         """
         # phonon.set_dynamical_matrix()
-        self.__Irrep = IrReps(dynamical_matrix=phonon._dynamical_matrix, q=q, is_little_cogroup=False,
-                              nac_q_direction=None, factor=factor, symprec=symprec,
+        self.__Irrep = IrReps(dynamical_matrix=phonon._dynamical_matrix,
+                              q=q,
+                              is_little_cogroup=False,
+                              nac_q_direction=None,
+                              factor=factor,
+                              symprec=symprec,
                               degeneracy_tolerance=degeneracy_tolerance)
         self.__Irrep.run()
         self._IRLabels = self.__Irrep._get_ir_labels()
@@ -131,68 +137,71 @@ class AtomicContributionsCalculator(object):
         for band in range(len(self.__ListOfModesWithDegeneracy)):
             self.__freqlist[band] = self.__ListOfModesWithDegeneracy[band][0]
 
-    def __FormatEigenvectors(self):
+    def _eigenvector(self, atom, band):
         """
-        Formats eigenvectors to a dictionary: the first argument is the number of bands, the second the number of atoms, the third the Cartesian coordinate
-        """
-
-        self._EigFormat = {}
-        for alpha in range(self.__NumberOfBands):
-            laufer = 0
-            for beta in range(self.__natoms):
-                for xyz in range(0, 3):
-                    self._EigFormat[beta, alpha, xyz] = self._eigvecs[laufer][alpha]
-                    laufer = laufer + 1
-
-    def _Eigenvector(self, atom, band, xoryorz):
-        """
-        Gives a certain eigenvector corresponding to one specific atom, band and Cartesian coordinate
+        Gives a certain eigenvector corresponding to one specific atom and band
 
         args:
             atom (int) : number of the atoms (same order as in POSCAR)
             band (int) : number of the frequency (ordered by energy)
-            xoryorz (int): Cartesian coordinate of the eigenvector
-
-
         """
 
-        return np.real(self._EigFormat[atom, band, xoryorz])
+        return np.real(self._eigvecs[3*atom:3*atom+3, band])
 
-    def __massEig(self, atom, band, xoryorz):
+    def _displacement_vector(self, atom, band):
         """
-        Gives a certain eigenvector divided by sqrt(mass of the atom) corresponding to one specific atom, band and Cartesian coordinate
+        Calculate eigendisplacement for specific atom and band
 
         args:
             atom (int) : number of the atoms (same order as in POSCAR)
             band (int) : number of the frequency (ordered by energy)
-            xoryorz (int): Cartesian coordinate of the eigenvector
+        """
 
+        return self._eigenvector(atom, band) / np.sqrt(self._masses[atom])
+
+    def contributions(self):
+        """
+
+        contributions : dict
 
         """
 
-        return self._Eigenvector(atom, band, xoryorz) / np.sqrt(self.__masses[atom])
+        return self._PercentageAtom
 
-    def __set_Contributions(self):
+    def _set_contributions(self, squared=True):
         """
-        Calculate contribution of each atom to modes"
+        Calculate contribution of each atom to modes
         """
         self._PercentageAtom = {}
-        for freq in range(len(self._frequencies)):
+        modesum = []
+        for band in range(len(self._frequencies)):
+            modesum_here = 0
             for atom in range(self.__natoms):
-                sum = 0
-                for alpha in range(3):
-                    sum = sum + abs(self._Eigenvector(atom, freq, alpha) * self._Eigenvector(atom, freq, alpha))
-                self._PercentageAtom[freq, atom] = sum
+                # Use phonon eigenvectors
+                eigvec_real = np.linalg.norm(self._eigenvector(atom, band))
+                if squared:
+                    eigvec_real = np.square(eigvec_real)
+                self._PercentageAtom[band, atom] = abs(eigvec_real)
+                modesum_here = modesum_here + abs(eigvec_real)
+            modesum.append(modesum_here)
 
-    def __get_Contributions(self, band, atom):
+        if self.q != [0, 0, 0]:
+            import copy
+            saver = copy.deepcopy(self._PercentageAtom)
+            for band in range(len(self._frequencies)):
+                for atom in range(self.__natoms):
+                    self._PercentageAtom[band, atom] = saver[band, atom] / modesum[band]
+
+    def _get_contributions(self, band, atom):
         """
         Gives contribution of specific atom to modes with certain frequency
         args:
             band (int): number of the frequency (ordered by energy)
+            atom (int):
         """
         return self._PercentageAtom[band, atom]
 
-    def __set_Contributions_withoutmassweight(self):
+    def __set_contributions_withoutmassweight(self):
         """
         Calculate contribution of each atom to modes
         Here, eigenvectors divided by sqrt(mass of the atom) are used for the calculation
@@ -200,22 +209,21 @@ class AtomicContributionsCalculator(object):
         self.__PercentageAtom_massweight = {}
         atomssum = {}
         saver = {}
-        for freq in range(len(self._frequencies)):
-            atomssum[freq] = 0
+        for band in range(len(self._frequencies)):
+            atomssum[band] = 0
             for atom in range(self.__natoms):
-                sum = 0
-                for alpha in range(3):
-                    sum = sum + abs(self.__massEig(atom, freq, alpha) * self.__massEig(atom, freq, alpha))
-                atomssum[freq] = atomssum[freq] + sum
+                eigvec_real = np.linalg.norm(self._displacement_vector(atom, band))
+                eigvec_squared = np.square(eigvec_real)
+                atomssum[band] = atomssum[band] + abs(eigvec_squared)
 
                 # Hier muss noch was hin, damit rechnung richtig wird
-                saver[freq, atom] = sum
+                saver[band, atom] = abs(eigvec_squared)
 
-        for freq in range(len(self._frequencies)):
+        for band in range(len(self._frequencies)):
             for atom in range(self.__natoms):
-                self.__PercentageAtom_massweight[freq, atom] = saver[freq, atom] / atomssum[freq]
+                self.__PercentageAtom_massweight[band, atom] = saver[band, atom] / atomssum[band]
 
-    def __get_Contributions_withoutmassweight(self, band, atom):
+    def __get_contributions_withoutmassweight(self, band, atom):
         """
         Gives contribution of specific atom to modes with certain frequency
         Here, eigenvectors divided by sqrt(mass of the atom) are used for the calculation
@@ -235,16 +243,25 @@ class AtomicContributionsCalculator(object):
         """
         file = open(filename, 'w')
         file.write('Frequency Contributions \n')
-        for freq in range(len(self._frequencies)):
-            file.write('%s ' % (self._frequencies[freq]))
+        for mode in range(len(self._frequencies)):
+            file.write('%s ' % (self._frequencies[mode]))
             for atom in range(self.__natoms):
-                file.write('%s ' % (self.__get_Contributions(freq, atom)))
+                file.write('%s ' % (self._get_contributions(mode, atom)))
             file.write('\n ')
 
         file.close()
 
-    def plot(self, atomgroups, colorofgroups, legendforgroups, freqstart=[], freqend=[], freqlist=[], labelsforfreq=[],
-             irreps_ax=True, transmodes=True, massincluded=True):
+    def plot(self,
+             atomgroups,
+             colorofgroups,
+             legendforgroups,
+             freqstart: float=None,
+             freqend: float=None,
+             freqlist: list=None,
+             labelsforfreq: list=None,
+             irreps_ax=True,
+             transmodes=True,
+             massincluded=True):
         """
         Plots contributions of atoms/several atoms to modes with certain frequencies (freqlist starts at 1 here)
 
@@ -254,24 +271,24 @@ class AtomicContributionsCalculator(object):
             legendforgroups (list of str): list that gives a legend for each group of atoms
             freqstart (float): min frequency of plot in cm-1
             freqend (float): max frequency of plot in cm-1
-            freqlist (list of int): list of frequencies that will be plotted; if no list is given all frequencies in the range from freqstart to freqend are plotted, list begins at 1
+            freqlist (list of int): list of frequencies that will be plotted; if no list is given all frequencies in the
+            range from freqstart to freqend are plotted, list begins at 1
             labelsforfreq (list of str): list of labels (str) for each frequency
             filename (str): filename for the plot
             transmodes (boolean): if transmode is true than translational modes are shown
-            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation instead of the eigenvector
+            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation
+            instead of the eigenvector
         """
 
         try:
-            if labelsforfreq == []:
+            if not labelsforfreq:
                 labelsforfreq = self._IRLabels
         except:
             print("")
 
-        if freqlist == []:
+        if not freqlist:
             freqlist = self.__freqlist
-
         else:
-
             for freq in range(len(freqlist)):
                 freqlist[freq] = freqlist[freq] - 1
 
@@ -302,10 +319,10 @@ class AtomicContributionsCalculator(object):
               atomgroups,
               colorofgroups,
               legendforgroups,
-              freqstart=[],
-              freqend=[],
-              freqlist=[],
-              labelsforfreq=[],
+              freqstart: float=None,
+              freqend: float=None,
+              freqlist: list=None,
+              labelsforfreq: list=None,
               irreps_ax = True,
               massincluded=True):
         """
@@ -319,12 +336,13 @@ class AtomicContributionsCalculator(object):
             freqend (float): max frequency of plot in cm-1
             freqlist (list of int): list of frequencies that will be plotted; this freqlist starts at 0
             labelsforfreq (list of str): list of labels (str) for each frequency
-            filename (str): filename for the plot
-            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation instead of the eigenvector
+            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation
+            instead of the eigenvector
         """
         # setting of some parameters in matplotlib: http://matplotlib.org/users/customizing.html
-        #mpl.rcParams["savefig.directory"] = os.chdir(os.getcwd())
-        #mpl.rcParams["savefig.format"] = 'eps'
+        # import os
+        # mpl.rcParams["savefig.directory"] = os.chdir(os.getcwd())
+        # mpl.rcParams["savefig.format"] = 'eps'
 
         fig, ax1 = plt.subplots()
         p = {}
@@ -340,9 +358,9 @@ class AtomicContributionsCalculator(object):
                 atom = int(number) - 1
                 for freq in range(len(freqlist)):
                     if massincluded:
-                        entry[freq] = entry[freq] + self.__get_Contributions(freqlist[freq], atom)
+                        entry[freq] = entry[freq] + self._get_contributions(freqlist[freq], atom)
                     else:
-                        entry[freq] = entry[freq] + self.__get_Contributions_withoutmassweight(freqlist[freq], atom)
+                        entry[freq] = entry[freq] + self.__get_contributions_withoutmassweight(freqlist[freq], atom)
                     if group == 0:
                         summe[freq] = 0
 
@@ -395,7 +413,8 @@ class AtomicContributionsCalculator(object):
         return plt
 
     def __get_freqbordersforplot(self, freqstart, freqend, freqlist):
-        if freqstart == []:
+
+        if not freqstart:
             start = 0.0
         else:
             for freq in range(len(freqlist)):
@@ -404,7 +423,7 @@ class AtomicContributionsCalculator(object):
                     break
                 else:
                     start = len(freqlist)
-        if freqend == []:
+        if not freqend:
             end = len(freqlist)
         else:
             for freq in range(len(freqlist) - 1, 0, -1):
@@ -416,8 +435,16 @@ class AtomicContributionsCalculator(object):
 
         return start, end
 
-    def plot_irred(self, atomgroups, colorofgroups, legendforgroups, transmodes=False, irreps=[], irreps_ax=True,
-                   freqstart=[], freqend=[], massincluded=True):
+    def plot_irred(self,
+                   atomgroups,
+                   colorofgroups,
+                   legendforgroups,
+                   transmodes=False,
+                   irreps: list=None,
+                   irreps_ax=True,
+                   freqstart: float=None,
+                   freqend: float=None,
+                   massincluded=True):
         """
         Plots contributions of atoms/several atoms to modes with certain irreducible representations (selected by
         Mulliken symbol)
@@ -428,7 +455,8 @@ class AtomicContributionsCalculator(object):
             transmodes (boolean): translational modes are included if true
             irreps (list of str): list that includes the irreducible modes that are plotted
             filename (str): filename for the plot
-            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation instead of the eigenvector
+            massincluded (boolean): if false, uses eigenvector divided by sqrt(mass of the atom) for the calculation
+            instead of the eigenvector
         """
 
         freqlist = []

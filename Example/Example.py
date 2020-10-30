@@ -9,7 +9,7 @@ test = AtomicContributionsCalculator(PoscarName='POSCAR', ForceConstants=False, 
                                      primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]], )
 
 # write a file with atomic contributions to each mode
-test.write_file();
+test.write_file()
 
 # atom numbers start at 1, not at 0
 atomgroups = [[1, 2], [3, 4], [5, 6, 7, 8], [9, 10, 11, 12, 13, 14, 15, 16]]  # this list groups the atoms for the plots
