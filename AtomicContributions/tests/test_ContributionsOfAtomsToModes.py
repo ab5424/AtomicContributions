@@ -13,12 +13,12 @@ class AtomicContributionToModesTest(unittest.TestCase):
                                                            forceconstants=False,
                                                            force_filename=os.path.join(path_here, 'FORCE_SETS'),
                                                            supercell_matrix=[[3, 0, 0], [0, 3, 0], [0, 0, 4]],
-                                                           primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                                                           primitive_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
         self.Contributions_masses = AtomicContributionsCalculator(poscar_name=os.path.join(path_here, 'POSCAR'),
                                                                   forceconstants=False,
                                                                   force_filename=os.path.join(path_here, 'FORCE_SETS'),
                                                                   supercell_matrix=[[3, 0, 0], [0, 3, 0], [0, 0, 4]],
-                                                                  primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+                                                                  primitive_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]],
                                                                   masses=[12.010700, 12.010700, 15.999400, 15.999400,
                                                                           14.006700, 14.006700, 14.006700, 14.006700,
                                                                           2, 2, 2, 2, 2, 2, 2, 2])
@@ -29,7 +29,7 @@ class AtomicContributionToModesTest(unittest.TestCase):
                                                             supercell_matrix=[[2, 0, 0], [0, 2, 0], [0, 0, 2]],
                                                             nac=True,
                                                             born_filename=os.path.join(path_here, 'BORN.NaCl'),
-                                                            primitive=[[0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]])
+                                                            primitive_matrix=[[0, 0.5, 0.5], [0.5, 0, 0.5], [0.5, 0.5, 0]])
         self.ContributionsFC = AtomicContributionsCalculator(poscar_name=os.path.join(path_here, 'POSCAR_Methanol'),
                                                              forceconstants=True,
                                                              force_filename=os.path.join(path_here,

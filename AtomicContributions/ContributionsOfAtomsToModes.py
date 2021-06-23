@@ -1,4 +1,5 @@
 # Copyright (C) 2017 Janine George
+# https://github.com/jarvist/Julia-Phonons/blob/master/src/JuliaPhonons.jl
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,7 +22,7 @@ class AtomicContributionsCalculator(object):
         nac=False,
         symprec=1e-5,
         masses: list=None,
-        primitive=None,
+        primitive_matrix=None,
         degeneracy_tolerance=1e-4,
         factor=VaspToCm,
         q=None
@@ -39,7 +40,7 @@ class AtomicContributionsCalculator(object):
             calculated for primitive cell)
             symprec (float): contains symprec tag as used in Phonopy
             masses (list): Masses in this list are used instead of the ones prepared in Phonopy. Useful for isotopes.
-            primitive (list of lists): contains rotational matrix to arrive at primitive cell
+            primitive_matrix (list of lists): contains rotational matrix to arrive at primitive cell
             factor (float): VaspToCm or VaspToTHz or VaspToEv
             q (list of int): q point for the plot. So far only Gamma works
 
@@ -47,12 +48,14 @@ class AtomicContributionsCalculator(object):
 
         self._unitcell = read_vasp(poscar_name)
         self._supercell_matrix = supercell_matrix or [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        primitive = primitive or [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
-        self._phonon = Phonopy(self._unitcell, supercell_matrix=self._supercell_matrix, primitive_matrix=primitive,
+        self._primitive_matrix = primitive_matrix or [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+        self._phonon = Phonopy(self._unitcell,
+                               supercell_matrix=self._supercell_matrix,
+                               primitive_matrix=self._primitive_matrix,
                                factor=factor, symprec=symprec)
-        self.__natoms = self._phonon.get_primitive().get_number_of_atoms()
-        self.__symbols = self._phonon.get_primitive().get_chemical_symbols()
-        self.__factor = factor
+        self._natoms = self._phonon.get_primitive().get_number_of_atoms()
+        self._symbols = self._phonon.get_primitive().get_chemical_symbols()
+        self._factor = factor
         # If different masses are supplied
         if masses:
             self._phonon.set_masses(masses)
@@ -60,10 +63,10 @@ class AtomicContributionsCalculator(object):
 
         # Forces or Force Constants
         if not forceconstants:
-            self.__set_forcesets(filename=force_filename, phonon=self._phonon)
+            self._set_forcesets(filename=force_filename, phonon=self._phonon)
 
         if forceconstants:
-            self.__set_force_constants(filename=force_filename, phonon=self._phonon)
+            self._set_force_constants(filename=force_filename, phonon=self._phonon)
 
         # Apply NAC Correction
         if nac:
@@ -86,11 +89,11 @@ class AtomicContributionsCalculator(object):
 
         # irrepsobject
         try:
-            self.__set_irlabels(phonon=self._phonon,
-                                degeneracy_tolerance=degeneracy_tolerance,
-                                factor=factor,
-                                q=self.q,
-                                symprec=symprec)
+            self._set_irlabels(phonon=self._phonon,
+                               degeneracy_tolerance=degeneracy_tolerance,
+                               factor=factor,
+                               q=self.q,
+                               symprec=symprec)
         except:
             print(
                 "Cannot assign IR labels. Play around with symprec, degeneracy_tolerance. The point group could not be implemented.")
@@ -104,7 +107,37 @@ class AtomicContributionsCalculator(object):
         """
         print(self._phonon.get_primitive())
 
-    def __set_forcesets(self, filename, phonon):
+    @property
+    def supercell_matrix(self):
+        """Transformation matrix to supercell cell from unit cell
+
+        ndarray
+            Supercell matrix with respect to unit cell.
+            shape=(3, 3), dtype='intc', order='C'
+
+        """
+
+        return self._supercell_matrix
+
+    def get_supercell_matrix(self):
+        return self.supercell_matrix
+
+    @property
+    def primitive_matrix(self):
+        """Transformation matrix to primitive cell from unit cell
+
+        ndarray
+            Primitive matrix with respect to unit cell.
+            shape=(3, 3), dtype='double', order='C'
+
+        """
+
+        return self._primitive_matrix
+
+    def get_primitive_matrix(self):
+        return self.primitive_matrix
+
+    def _set_forcesets(self, filename, phonon):
         """
         sets forces
 
@@ -114,19 +147,19 @@ class AtomicContributionsCalculator(object):
         phonon.set_displacement_dataset(force_sets)
         phonon.produce_force_constants()
 
-    def __set_force_constants(self, filename, phonon):
+    def _set_force_constants(self, filename, phonon):
         """
         sets force constants
         """
         force_constants = parse_FORCE_CONSTANTS(filename=filename)
         phonon.set_force_constants(force_constants)
 
-    def __set_irlabels(self, phonon, degeneracy_tolerance, factor, q, symprec):
+    def _set_irlabels(self, phonon, degeneracy_tolerance, factor, q, symprec):
         """
         sets list of irreducible labels and list of frequencies without degeneracy
         """
         # phonon.set_dynamical_matrix()
-        self.__Irrep = IrReps(dynamical_matrix=phonon._dynamical_matrix,
+        self.__Irrep = IrReps(dynamical_matrix=phonon.dynamical_matrix,
                               q=q,
                               is_little_cogroup=False,
                               nac_q_direction=None,
@@ -180,7 +213,7 @@ class AtomicContributionsCalculator(object):
         modesum = []
         for band in range(len(self._frequencies)):
             modesum_here = 0
-            for atom in range(self.__natoms):
+            for atom in range(self._natoms):
                 # Use phonon eigenvectors
                 eigvec_real = np.linalg.norm(self._eigenvector(atom, band))
                 if squared:
@@ -189,11 +222,12 @@ class AtomicContributionsCalculator(object):
                 modesum_here = modesum_here + abs(eigvec_real)
             modesum.append(modesum_here)
 
+        # For q-points != gamma, normalize contributions to 100%
         if self.q != [0, 0, 0]:
             import copy
             saver = copy.deepcopy(self._PercentageAtom)
             for band in range(len(self._frequencies)):
-                for atom in range(self.__natoms):
+                for atom in range(self._natoms):
                     self._PercentageAtom[band, atom] = saver[band, atom] / modesum[band]
 
     def _get_contributions_eigenvector(self, band, atom):
@@ -216,7 +250,7 @@ class AtomicContributionsCalculator(object):
         saver = {}
         for band in range(len(self._frequencies)):
             atomssum[band] = 0
-            for atom in range(self.__natoms):
+            for atom in range(self._natoms):
                 eigvec_real = np.linalg.norm(self._displacement_vector(atom, band))
                 eigvec_squared = np.square(eigvec_real)
                 atomssum[band] = atomssum[band] + abs(eigvec_squared)
@@ -225,7 +259,7 @@ class AtomicContributionsCalculator(object):
                 saver[band, atom] = abs(eigvec_squared)
 
         for band in range(len(self._frequencies)):
-            for atom in range(self.__natoms):
+            for atom in range(self._natoms):
                 self.__PercentageAtom_massweight[band, atom] = saver[band, atom] / atomssum[band]
 
     def __get_contributions_withoutmassweight(self, band, atom):
@@ -250,7 +284,7 @@ class AtomicContributionsCalculator(object):
         file.write('Frequency Contributions \n')
         for mode in range(len(self._frequencies)):
             file.write('%s ' % (self._frequencies[mode]))
-            for atom in range(self.__natoms):
+            for atom in range(self._natoms):
                 file.write('%s ' % (self._get_contributions_eigenvector(mode, atom)))
             file.write('\n ')
 
@@ -395,11 +429,11 @@ class AtomicContributionsCalculator(object):
         ax1.set_ylim(start - 0.5, end - 0.5)
         ax1.set_xlim(0.0, 1.0)
         ax1.set_xlabel('Contribution of Atoms to Modes')
-        if self.__factor == VaspToCm:
+        if self._factor == VaspToCm:
             ax1.set_ylabel('Wavenumber (cm$^{-1}$)')
-        elif self.__factor == VaspToTHz:
+        elif self._factor == VaspToTHz:
             ax1.set_ylabel('Frequency (THz)')
-        elif self.__factor == VaspToEv:
+        elif self._factor == VaspToEv:
             ax1.set_ylabel('Frequency (eV)')
         else:
             ax1.set_ylabel('Frequency')

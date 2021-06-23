@@ -4,9 +4,11 @@ from AtomicContributions.ContributionsOfAtomsToModes import AtomicContributionsC
 
 
 # Initialize AtomicContributionToModes
-test = AtomicContributionsCalculator(poscar_name='POSCAR', forceconstants=False, force_filename='FORCE_SETS',
+test = AtomicContributionsCalculator(poscar_name='POSCAR',
+                                     forceconstants=False,
+                                     force_filename='FORCE_SETS',
                                      supercell_matrix=[[3, 0, 0], [0, 3, 0], [0, 0, 4]],
-                                     primitive=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+                                     primitive_matrix=[[1, 0, 0], [0, 1, 0], [0, 0, 1]])
 
 # write a file with atomic contributions to each mode
 test.write_file()
